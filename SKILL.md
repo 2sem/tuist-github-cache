@@ -66,6 +66,43 @@ generationOptions: .options(enableCaching: true)
 - `id-token: write` must be on the job (or workflow) or `tuist auth login` fails on CI.
 - Keep `tuist auth login` before any command that talks to the Tuist server.
 - Binary cache only helps when targets are split into real modules/packages; a single fat app target re-compiles every time.
+- The remote binary cache is only populated by a job that runs `tuist cache`. If no workflow does, every lookup misses and just adds latency to `tuist test` / `tuist build` — skip it (below) or add a warming job.
+
+### Skip the binary cache when the GitHub cache misses
+
+Give the layer-1 `actions/cache` step an `id`, then gate login/setup on `cache-hit`
+and turn the binary cache off for the test run. The cache step must come **before**
+`tuist auth login`, or `steps.<id>` is undefined and the `if:` is always false.
+
+```yaml
+- name: Cache SPM dependencies
+  id: spm-cache
+  uses: actions/cache@v6
+  with:
+    path: |
+      Tuist/.build
+      ~/.cache/swifterpm
+    key: spm-${{ runner.os }}-${{ hashFiles('Tuist/Package.resolved') }}
+
+- name: Log in Tuist
+  if: steps.spm-cache.outputs.cache-hit == 'true'
+  run: tuist auth login
+
+- run: tuist install
+
+- name: Setup Tuist Cache Service
+  if: steps.spm-cache.outputs.cache-hit == 'true'
+  run: tuist setup cache
+
+- name: Test App
+  env:
+    TUIST_TEST_BINARY_CACHE: ${{ steps.spm-cache.outputs.cache-hit == 'true' && 'true' || 'false' }}
+  run: tuist test
+```
+
+- `TUIST_TEST_BINARY_CACHE=false` is the env form of `tuist test --no-binary-cache` (build from sources). For `tuist build`/`generate` use that command's own `--no-binary-cache` flag; check `tuist help <cmd>`.
+- `cache-hit` is `'true'` only on an exact key match; with no `restore-keys` a miss means the first run after a `Package.resolved` change builds from sources and the next run uses the binary cache.
+- Keep `id-token: write` on the job even though login is conditional.
 
 ## 3. Skip and cancel wasted runs
 
@@ -104,5 +141,6 @@ Old majors run on deprecated Node runtimes and warn. Known-good set at time of w
 
 - Hit but still slow → the cached path is not the one the tool uses; check the step log for where `tuist install` actually clones.
 - Cache never saves → job failed before the post-step, or `path` expands to nothing.
+- `if: steps.<id>.outputs.cache-hit` never true → the cache step is declared after the step using it, or lacks an `id`.
 - Stale after changing paths → forgot to bump the key prefix (see §1).
 - Deploy workflow not exercised by PR CI → say so in the PR test plan; it only runs on dispatch.

@@ -5,7 +5,7 @@ A [Claude Code skill](https://docs.claude.com/en/docs/claude-code) for speeding 
 ## What it covers
 
 1. **Dependency cache** — `actions/cache` for `Tuist/.build` and `~/.cache/swifterpm`, keyed on `Tuist/Package.resolved`, including the stale-key trap when the cached paths change.
-2. **Tuist binary cache** — OIDC `tuist auth login`, `tuist setup cache`, `enableCaching`.
+2. **Tuist binary cache** — OIDC `tuist auth login`, `tuist setup cache`, `enableCaching`, and skipping it (`TUIST_TEST_BINARY_CACHE=false`) when the GitHub SPM cache misses.
 3. **Skip/cancel wasted runs** — `paths:` filters and `concurrency:`.
 4. **Action upgrades** — Node 24 versions of checkout, cache and mise-action.
 5. **Verification** — how to confirm hit/miss and measure the gain.
